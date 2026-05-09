@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<title>配達チェック</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif;
+    background: #f2f2f7;
+    color: #1c1c1e;
+    min-height: 100vh;
+  }
+
+  header {
+    background: #fff;
+    padding: 16px 20px 12px;
+    border-bottom: 1px solid #e5e5ea;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+
+  header h1 {
+    font-size: 22px;
+    font-weight: 700;
+  }
+
+  .progress-bar-wrap {
+    margin-top: 10px;
+    background: #e5e5ea;
+    border-radius: 99px;
+    height: 8px;
+    overflow: hidden;
+  }
+
+  .progress-bar {
+    height: 100%;
+    background: #34c759;
+    border-radius: 99px;
+    transition: width 0.3s ease;
+  }
+
+  .progress-label {
+    margin-top: 6px;
+    font-size: 13px;
+    color: #8e8e93;
+  }
+
+  .progress-label span {
+    color: #34c759;
+    font-weight: 600;
+  }
+
+  .tabs {
+    display: flex;
+    background: #fff;
+    border-bottom: 1px solid #e5e5ea;
+  }
+
+  .tab {
+    flex: 1;
+    padding: 12px;
+    text-align: center;
+    font-size: 14px;
+    font-weight: 600;
+    color: #8e8e93;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+  }
+
+  .tab.active {
+    color: #007aff;
+    border-bottom-color: #007aff;
+  }
+
+  .view { display: none; }
+  .view.active { display: block; }
+
+  /* --- チェックリスト --- */
+  .list { padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+
+  .customer-card {
+    background: #fff;
+    border-radius: 12px;
+    padding: 16px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    cursor: pointer;
+    transition: opacity 0.2s;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .customer-card.done {
+    opacity: 0.45;
+  }
+
+  .check-circle {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 2px solid #c7c7cc;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s, border-color 0.2s;
+  }
+
+  .customer-card.done .check-circle {
+    background: #34c759;
+    border-color: #34c759;
+  }
+
+  .check-circle svg { display: none; }
+  .customer-card.done .check-circle svg { display: block; }
+
+  .customer-info { flex: 1; }
+  .customer-name { font-size: 17px; font-weight: 600; }
+  .customer-note { font-size: 13px; color: #8e8e93; margin-top: 2px; }
+
+  .order-badge {
+    font-size: 13px;
+    color: #8e8e93;
+    font-weight: 600;
+    min-width: 24px;
+    text-align: right;
+  }
+
+  /* --- 完了バナー --- */
+  .complete-banner {
+    display: none;
+    margin: 16px;
+    background: #34c759;
+    color: #fff;
+    border-radius: 12px;
+    padding: 18px;
+    text-align: center;
+    font-size: 17px;
+    font-weight: 700;
+  }
+
+  .complete-banner.show { display: block; }
+
+  /* --- アクションボタン --- */
+  .actions {
+    padding: 0 16px 16px;
+    display: flex;
+    gap: 10px;
+  }
+
+  .btn {
+    flex: 1;
+    padding: 14px;
+    border: none;
+    border-radius: 10px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .btn-reset { background: #ff3b30; color: #fff; }
+  .btn-all   { background: #007aff; color: #fff; }
+
+  /* --- 未配達タブ --- */
+  .missed-list { padding: 16px; }
+
+  .missed-empty {
+    text-align: center;
+    padding: 60px 20px;
+    color: #8e8e93;
+    font-size: 16px;
+  }
+
+  .missed-card {
+    background: #fff3f3;
+    border: 1.5px solid #ff3b30;
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin-bottom: 10px;
+  }
+
+  .missed-card .customer-name { color: #ff3b30; }
+
+  /* --- 顧客編集タブ --- */
+  .edit-area { padding: 16px; }
+
+  .edit-area textarea {
+    width: 100%;
+    min-height: 260px;
+    font-size: 15px;
+    border: 1.5px solid #c7c7cc;
+    border-radius: 10px;
+    padding: 12px;
+    font-family: inherit;
+    resize: vertical;
+    outline: none;
+  }
+
+  .edit-area textarea:focus { border-color: #007aff; }
+
+  .edit-hint {
+    font-size: 13px;
+    color: #8e8e93;
+    margin-bottom: 10px;
+    line-height: 1.6;
+  }
+
+  .btn-save {
+    width: 100%;
+    padding: 14px;
+    background: #007aff;
+    color: #fff;
+    border: none;
+    border-radius: 10px;
+    font-size: 16px;
+    font-weight: 700;
+    margin-top: 12px;
+    cursor: pointer;
+  }
+
+  .save-msg {
+    text-align: center;
+    color: #34c759;
+    font-size: 14px;
+    font-weight: 600;
+    margin-top: 8px;
+    height: 20px;
+  }
+
+  /* フィルタ */
+  .filter-row {
+    display: flex;
+    gap: 8px;
+    padding: 12px 16px 0;
+  }
+
+  .filter-btn {
+    padding: 6px 14px;
+    border-radius: 99px;
+    border: 1.5px solid #c7c7cc;
+    background: #fff;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    color: #8e8e93;
+  }
+
+  .filter-btn.active {
+    background: #007aff;
+    border-color: #007aff;
+    color: #fff;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>📦 配達チェック</h1>
+  <div class="progress-bar-wrap">
+    <div class="progress-bar" id="progressBar"></div>
+  </div>
+  <div class="progress-label" id="progressLabel"></div>
+</header>
+
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('check')">チェック</div>
+  <div class="tab" onclick="switchTab('missed')">未配達</div>
+  <div class="tab" onclick="switchTab('edit')">顧客編集</div>
+</div>
+
+<!-- チェックタブ -->
+<div id="view-check" class="view active">
+  <div class="filter-row">
+    <button class="filter-btn active" onclick="setFilter('all', this)">全員</button>
+    <button class="filter-btn" onclick="setFilter('pending', this)">未配達のみ</button>
+    <button class="filter-btn" onclick="setFilter('done', this)">配達済みのみ</button>
+  </div>
+  <div class="complete-banner" id="completeBanner">🎉 全件配達完了！</div>
+  <div class="list" id="customerList"></div>
+  <div class="actions">
+    <button class="btn btn-reset" onclick="resetAll()">🔄 リセット</button>
+    <button class="btn btn-all" onclick="checkAll()">✅ 全完了</button>
+  </div>
+</div>
+
+<!-- 未配達タブ -->
+<div id="view-missed" class="view">
+  <div class="missed-list" id="missedList"></div>
+</div>
+
+<!-- 顧客編集タブ -->
+<div id="view-edit" class="view">
+  <div class="edit-area">
+    <p class="edit-hint">
+      1行1件で入力。「名前,備考」の形式（備考は省略可）<br>
+      例：<br>
+      　田中様,2F投函<br>
+      　鈴木様<br>
+      　山田様,不在時ポスト
+    </p>
+    <textarea id="editTextarea" placeholder="田中様,2F投函&#10;鈴木様&#10;山田様,不在時ポスト"></textarea>
+    <button class="btn-save" onclick="saveCustomers()">保存する</button>
+    <div class="save-msg" id="saveMsg"></div>
+  </div>
+</div>
+
+<script>
+// ---- デフォルト顧客（初回のみ） ----
+const DEFAULT_CUSTOMERS = [
+  { name: "田中様", note: "2F投函" },
+  { name: "鈴木様", note: "" },
+  { name: "山田様", note: "不在時ポスト" },
+];
+
+// ---- State ----
+let customers = [];   // [{name, note}]
+let checked = {};     // {index: bool}
+let filter = "all";
+
+const STORAGE_CUSTOMERS = "delivery_customers";
+const STORAGE_CHECKED   = "delivery_checked";
+const STORAGE_DATE      = "delivery_date";
+
+function todayStr() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function load() {
+  const raw = localStorage.getItem(STORAGE_CUSTOMERS);
+  customers = raw ? JSON.parse(raw) : DEFAULT_CUSTOMERS;
+
+  // 日付が変わっていたらチェックをリセット
+  const savedDate = localStorage.getItem(STORAGE_DATE);
+  if (savedDate !== todayStr()) {
+    checked = {};
+    localStorage.setItem(STORAGE_DATE, todayStr());
+    localStorage.removeItem(STORAGE_CHECKED);
+  } else {
+    const rawChecked = localStorage.getItem(STORAGE_CHECKED);
+    checked = rawChecked ? JSON.parse(rawChecked) : {};
+  }
+}
+
+function saveChecked() {
+  localStorage.setItem(STORAGE_CHECKED, JSON.stringify(checked));
+}
+
+function saveCustomerData() {
+  localStorage.setItem(STORAGE_CUSTOMERS, JSON.stringify(customers));
+}
+
+// ---- レンダリング ----
+function render() {
+  const list = document.getElementById("customerList");
+  list.innerHTML = "";
+
+  const total = customers.length;
+  const doneCount = Object.values(checked).filter(Boolean).length;
+
+  // プログレス
+  const pct = total === 0 ? 0 : Math.round((doneCount / total) * 100);
+  document.getElementById("progressBar").style.width = pct + "%";
+  document.getElementById("progressLabel").innerHTML =
+    `<span>${doneCount}</span> / ${total} 件完了（${pct}%）`;
+
+  // 完了バナー
+  const banner = document.getElementById("completeBanner");
+  banner.classList.toggle("show", total > 0 && doneCount === total);
+
+  customers.forEach((c, i) => {
+    const isDone = !!checked[i];
+    if (filter === "pending" && isDone) return;
+    if (filter === "done" && !isDone) return;
+
+    const card = document.createElement("div");
+    card.className = "customer-card" + (isDone ? " done" : "");
+    card.innerHTML = `
+      <div class="check-circle">
+        <svg width="14" height="11" viewBox="0 0 14 11" fill="none">
+          <path d="M1 5L5 9L13 1" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <div class="customer-info">
+        <div class="customer-name">${escHtml(c.name)}</div>
+        ${c.note ? `<div class="customer-note">${escHtml(c.note)}</div>` : ""}
+      </div>
+      <div class="order-badge">${i + 1}</div>
+    `;
+    card.addEventListener("click", () => toggle(i));
+    list.appendChild(card);
+  });
+
+  renderMissed();
+}
+
+function renderMissed() {
+  const el = document.getElementById("missedList");
+  const missed = customers.filter((_, i) => !checked[i]);
+  if (missed.length === 0) {
+    el.innerHTML = `<div class="missed-empty">✅ 未配達なし</div>`;
+    return;
+  }
+  el.innerHTML = missed.map((c, idx) => {
+    const origIdx = customers.indexOf(c);
+    return `
+      <div class="missed-card">
+        <div class="customer-name">${escHtml(c.name)}</div>
+        ${c.note ? `<div class="customer-note">${escHtml(c.note)}</div>` : ""}
+      </div>`;
+  }).join("");
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+
+// ---- アクション ----
+function toggle(i) {
+  checked[i] = !checked[i];
+  saveChecked();
+  render();
+}
+
+function resetAll() {
+  if (!confirm("チェックをすべてリセットしますか？")) return;
+  checked = {};
+  saveChecked();
+  render();
+}
+
+function checkAll() {
+  customers.forEach((_, i) => { checked[i] = true; });
+  saveChecked();
+  render();
+}
+
+function setFilter(f, btn) {
+  filter = f;
+  document.querySelectorAll(".filter-btn").forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+  render();
+}
+
+// ---- タブ ----
+function switchTab(name) {
+  document.querySelectorAll(".tab").forEach((t, i) => {
+    t.classList.toggle("active", ["check","missed","edit"][i] === name);
+  });
+  document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
+  document.getElementById("view-" + name).classList.add("active");
+
+  if (name === "edit") syncEditArea();
+  if (name === "missed") renderMissed();
+}
+
+// ---- 顧客編集 ----
+function syncEditArea() {
+  document.getElementById("editTextarea").value =
+    customers.map(c => c.note ? `${c.name},${c.note}` : c.name).join("\n");
+}
+
+function saveCustomers() {
+  const lines = document.getElementById("editTextarea").value
+    .split("\n")
+    .map(l => l.trim())
+    .filter(l => l.length > 0);
+
+  customers = lines.map(l => {
+    const [name, ...rest] = l.split(",");
+    return { name: name.trim(), note: rest.join(",").trim() };
+  });
+
+  // チェック状態はリセット（件数・順番が変わる可能性があるため）
+  checked = {};
+  saveCustomerData();
+  saveChecked();
+
+  const msg = document.getElementById("saveMsg");
+  msg.textContent = `✓ ${customers.length} 件保存しました`;
+  setTimeout(() => { msg.textContent = ""; }, 2000);
+
+  render();
+}
+
+// ---- 起動 ----
+load();
+render();
+</script>
+</body>
+</html>

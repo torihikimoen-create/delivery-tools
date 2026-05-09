@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>配達マップ</title>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif;
+  background: #1c1c1e;
+  color: #fff;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ヘッダー */
+header {
+  background: #2c2c2e;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #3a3a3c;
+  flex-shrink: 0;
+  z-index: 1000;
+}
+
+header h1 { font-size: 17px; font-weight: 700; }
+
+.progress-pill {
+  background: #34c759;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 99px;
+}
+
+/* 地図 */
+#map {
+  flex: 1;
+  width: 100%;
+  z-index: 1;
+}
+
+/* ボトムパネル */
+.bottom-panel {
+  background: #2c2c2e;
+  border-top: 1px solid #3a3a3c;
+  flex-shrink: 0;
+  z-index: 1000;
+  max-height: 42dvh;
+  overflow-y: auto;
+}
+
+.panel-tabs {
+  display: flex;
+  border-bottom: 1px solid #3a3a3c;
+  position: sticky;
+  top: 0;
+  background: #2c2c2e;
+  z-index: 2;
+}
+
+.ptab {
+  flex: 1;
+  padding: 10px 6px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: #8e8e93;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+}
+.ptab.active { color: #007aff; border-bottom-color: #007aff; }
+
+.panel-view { display: none; }
+.panel-view.active { display: block; }
+
+/* ストップリスト */
+.stop-list { padding: 8px 12px; display: flex; flex-direction: column; gap: 6px; }
+
+.stop-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #3a3a3c;
+  border-radius: 10px;
+  padding: 10px 12px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.stop-row.done { opacity: 0.4; }
+.stop-row.active-stop { border: 1.5px solid #007aff; background: #1c3a5e; }
+
+.stop-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.dot-pending { background: #ff3b30; }
+.dot-done    { background: #34c759; }
+.dot-no-pin  { background: #8e8e93; border: 1.5px dashed #fff; }
+
+.stop-info { flex: 1; }
+.stop-name { font-size: 14px; font-weight: 600; }
+.stop-sub  { font-size: 11px; color: #8e8e93; margin-top: 1px; }
+
+.stop-actions { display: flex; gap: 6px; }
+
+.btn-sm {
+  padding: 5px 10px;
+  border: none;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.btn-goto   { background: #007aff; color: #fff; }
+.btn-check  { background: #34c759; color: #fff; }
+.btn-unpin  { background: #48484a; color: #fff; }
+
+/* 設定パネル */
+.settings-panel { padding: 12px; }
+
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid #3a3a3c;
+  font-size: 14px;
+}
+.setting-row:last-child { border-bottom: none; }
+
+.toggle {
+  width: 44px;
+  height: 26px;
+  background: #48484a;
+  border-radius: 99px;
+  position: relative;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.toggle.on { background: #34c759; }
+.toggle::after {
+  content: "";
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  background: #fff;
+  border-radius: 50%;
+  top: 2px;
+  left: 2px;
+  transition: left 0.2s;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+.toggle.on::after { left: 20px; }
+
+.btn-danger {
+  width: 100%;
+  padding: 12px;
+  background: #ff3b30;
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 700;
+  margin-top: 10px;
+  cursor: pointer;
+}
+
+/* ピン設置モードバナー */
+.pin-banner {
+  display: none;
+  position: absolute;
+  top: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #007aff;
+  color: #fff;
+  padding: 10px 18px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 700;
+  z-index: 999;
+  white-space: nowrap;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+}
+.pin-banner.show { display: block; }
+
+/* GPS精度サークル */
+.gps-status {
+  font-size: 12px;
+  color: #8e8e93;
+  text-align: center;
+  padding: 4px;
+}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>📍 配達マップ</h1>
+  <div class="progress-pill" id="progressPill">0/0</div>
+</header>
+
+<div id="map"></div>
+<div class="pin-banner" id="pinBanner">📌 地図をタップしてピンを設置</div>
+
+<div class="bottom-panel">
+  <div class="panel-tabs">
+    <div class="ptab active" onclick="switchPTab('stops')">配達先</div>
+    <div class="ptab" onclick="switchPTab('settings')">設定</div>
+  </div>
+
+  <div id="pview-stops" class="panel-view active">
+    <div class="gps-status" id="gpsStatus">GPS取得中...</div>
+    <div class="stop-list" id="stopList"></div>
+  </div>
+
+  <div id="pview-settings" class="panel-view">
+    <div class="settings-panel">
+      <div class="setting-row">
+        <span>現在地を自動追従</span>
+        <div class="toggle on" id="toggleFollow" onclick="toggleFollow()"></div>
+      </div>
+      <div class="setting-row">
+        <span>ルートライン表示</span>
+        <div class="toggle on" id="toggleRoute" onclick="toggleRoute()"></div>
+      </div>
+      <div class="setting-row">
+        <span>ピン設置モード</span>
+        <div class="toggle" id="togglePinMode" onclick="togglePinMode()"></div>
+      </div>
+      <button class="btn-danger" onclick="resetPins()">全ピンをリセット</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ===== localStorage キー（delivery_check.html と共有） =====
+const STORAGE_CUSTOMERS = "delivery_customers";
+const STORAGE_CHECKED   = "delivery_checked";
+const STORAGE_PINS      = "delivery_pins";       // {index: [lat, lng]}
+
+// ===== State =====
+let customers = [];
+let checked   = {};
+let pins      = {};          // {index: [lat, lng]}
+let markers   = {};          // {index: L.marker}
+let routeLine = null;
+let gpsMarker = null;
+let gpsCircle = null;
+let gpsWatchId = null;
+let currentPos = null;
+let followGPS  = true;
+let showRoute  = true;
+let pinMode    = false;
+let pinModeTarget = null;    // ピン設置待ちのインデックス
+
+// ===== 地図初期化 =====
+const map = L.map("map", {
+  zoomControl: true,
+  attributionControl: false,
+});
+
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  maxZoom: 19,
+}).addTo(map);
+
+// 初期位置（日本中心）
+map.setView([35.6812, 139.7671], 14);
+
+// ===== データ読み込み =====
+function loadData() {
+  const raw = localStorage.getItem(STORAGE_CUSTOMERS);
+  customers = raw ? JSON.parse(raw) : [];
+
+  const rawC = localStorage.getItem(STORAGE_CHECKED);
+  checked = rawC ? JSON.parse(rawC) : {};
+
+  const rawP = localStorage.getItem(STORAGE_PINS);
+  pins = rawP ? JSON.parse(rawP) : {};
+}
+
+function saveChecked() {
+  localStorage.setItem(STORAGE_CHECKED, JSON.stringify(checked));
+}
+
+function savePins() {
+  localStorage.setItem(STORAGE_PINS, JSON.stringify(pins));
+}
+
+// ===== マーカー管理 =====
+function makeIcon(isDone, hasPins) {
+  const color = !hasPins ? "#8e8e93" : isDone ? "#34c759" : "#ff3b30";
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="36" viewBox="0 0 28 36">
+    <path d="M14 0C6.27 0 0 6.27 0 14c0 9.33 14 22 14 22S28 23.33 28 14C28 6.27 21.73 0 14 0z" fill="${color}"/>
+    <circle cx="14" cy="14" r="6" fill="white"/>
+  </svg>`;
+  return L.divIcon({
+    html: svg,
+    iconSize: [28, 36],
+    iconAnchor: [14, 36],
+    popupAnchor: [0, -36],
+    className: "",
+  });
+}
+
+function refreshMarkers() {
+  // 既存マーカーを消す
+  Object.values(markers).forEach(m => map.removeLayer(m));
+  markers = {};
+
+  customers.forEach((c, i) => {
+    if (!pins[i]) return;
+    const isDone = !!checked[i];
+    const marker = L.marker(pins[i], { icon: makeIcon(isDone, true) })
+      .addTo(map)
+      .bindPopup(`<b>${c.name}</b>${c.note ? `<br>${c.note}` : ""}<br><button onclick="toggleCheck(${i})" style="margin-top:6px;padding:4px 10px;background:${isDone?"#ff3b30":"#34c759"};color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer">${isDone ? "未配達に戻す" : "✅ 配達完了"}</button>`);
+
+    markers[i] = marker;
+  });
+
+  refreshRoute();
+  renderStopList();
+  updateProgress();
+}
+
+function refreshRoute() {
+  if (routeLine) { map.removeLayer(routeLine); routeLine = null; }
+  if (!showRoute) return;
+
+  const coords = customers
+    .map((_, i) => pins[i])
+    .filter(Boolean);
+
+  if (coords.length >= 2) {
+    routeLine = L.polyline(coords, {
+      color: "#007aff",
+      weight: 3,
+      opacity: 0.7,
+      dashArray: "6 6",
+    }).addTo(map);
+  }
+}
+
+// ===== GPS =====
+function startGPS() {
+  if (!navigator.geolocation) {
+    document.getElementById("gpsStatus").textContent = "GPS非対応ブラウザです";
+    return;
+  }
+
+  gpsWatchId = navigator.geolocation.watchPosition(
+    pos => {
+      const { latitude: lat, longitude: lng, accuracy } = pos.coords;
+      currentPos = [lat, lng];
+
+      if (!gpsMarker) {
+        gpsMarker = L.circleMarker([lat, lng], {
+          radius: 8,
+          color: "#fff",
+          fillColor: "#007aff",
+          fillOpacity: 1,
+          weight: 2,
+        }).addTo(map);
+
+        gpsCircle = L.circle([lat, lng], {
+          radius: accuracy,
+          color: "#007aff",
+          fillColor: "#007aff",
+          fillOpacity: 0.1,
+          weight: 1,
+        }).addTo(map);
+
+        map.setView([lat, lng], 16);
+      } else {
+        gpsMarker.setLatLng([lat, lng]);
+        gpsCircle.setLatLng([lat, lng]).setRadius(accuracy);
+        if (followGPS) map.panTo([lat, lng]);
+      }
+
+      document.getElementById("gpsStatus").textContent =
+        `GPS精度: ±${Math.round(accuracy)}m`;
+    },
+    err => {
+      document.getElementById("gpsStatus").textContent =
+        `GPS取得失敗: ${err.message}`;
+    },
+    { enableHighAccuracy: true, maximumAge: 3000, timeout: 15000 }
+  );
+}
+
+// ===== ピン設置モード =====
+map.on("click", e => {
+  if (!pinMode || pinModeTarget === null) return;
+
+  pins[pinModeTarget] = [e.latlng.lat, e.latlng.lng];
+  savePins();
+  refreshMarkers();
+
+  // 次の未ピンへ
+  const next = customers.findIndex((_, i) => i > pinModeTarget && !pins[i]);
+  if (next !== -1) {
+    pinModeTarget = next;
+    document.getElementById("pinBanner").textContent =
+      `📌 ${customers[next].name} の場所をタップ`;
+  } else {
+    exitPinMode();
+  }
+});
+
+function enterPinModeForIndex(i) {
+  pinMode = true;
+  pinModeTarget = i;
+  document.getElementById("togglePinMode").classList.add("on");
+  document.getElementById("pinBanner").classList.add("show");
+  document.getElementById("pinBanner").textContent =
+    `📌 ${customers[i].name} の場所をタップ`;
+}
+
+function exitPinMode() {
+  pinMode = false;
+  pinModeTarget = null;
+  document.getElementById("togglePinMode").classList.remove("on");
+  document.getElementById("pinBanner").classList.remove("show");
+}
+
+function togglePinMode() {
+  if (pinMode) {
+    exitPinMode();
+  } else {
+    // 最初の未ピンから開始
+    const first = customers.findIndex((_, i) => !pins[i]);
+    if (first === -1) {
+      alert("全配達先にピンが設置済みです。\nリセットしてやり直すか、個別に「再設置」を使ってください。");
+      return;
+    }
+    enterPinModeForIndex(first);
+  }
+}
+
+// ===== チェック =====
+function toggleCheck(i) {
+  checked[i] = !checked[i];
+  saveChecked();
+  map.closePopup();
+  refreshMarkers();
+}
+
+// ===== ストップリスト =====
+function renderStopList() {
+  const el = document.getElementById("stopList");
+  el.innerHTML = "";
+
+  if (customers.length === 0) {
+    el.innerHTML = `<div style="color:#8e8e93;text-align:center;padding:20px;font-size:13px">delivery_check.html で顧客を登録してください</div>`;
+    return;
+  }
+
+  customers.forEach((c, i) => {
+    const isDone = !!checked[i];
+    const hasPin = !!pins[i];
+
+    const row = document.createElement("div");
+    row.className = "stop-row" + (isDone ? " done" : "");
+
+    const dotClass = hasPin ? (isDone ? "dot-done" : "dot-pending") : "dot-no-pin";
+
+    row.innerHTML = `
+      <div class="stop-dot ${dotClass}"></div>
+      <div class="stop-info">
+        <div class="stop-name">${escHtml(c.name)}</div>
+        <div class="stop-sub">${hasPin ? (isDone ? "配達済み" : "未配達") : "📌 ピン未設置"}</div>
+      </div>
+      <div class="stop-actions">
+        ${hasPin
+          ? `<button class="btn-sm btn-goto" onclick="gotoStop(${i})">地図</button>
+             <button class="btn-sm ${isDone ? "btn-unpin" : "btn-check"}" onclick="toggleCheck(${i})">${isDone ? "戻す" : "完了"}</button>`
+          : `<button class="btn-sm btn-goto" onclick="enterPinModeForIndex(${i});switchPTab('stops')">設置</button>`
+        }
+      </div>
+    `;
+    el.appendChild(row);
+  });
+}
+
+function gotoStop(i) {
+  if (!pins[i]) return;
+  map.setView(pins[i], 17);
+  if (markers[i]) markers[i].openPopup();
+  followGPS = false;
+  document.getElementById("toggleFollow").classList.remove("on");
+}
+
+// ===== 進捗 =====
+function updateProgress() {
+  const total = customers.length;
+  const done  = Object.values(checked).filter(Boolean).length;
+  document.getElementById("progressPill").textContent = `${done}/${total}`;
+}
+
+// ===== トグル =====
+function toggleFollow() {
+  followGPS = !followGPS;
+  document.getElementById("toggleFollow").classList.toggle("on", followGPS);
+}
+
+function toggleRoute() {
+  showRoute = !showRoute;
+  document.getElementById("toggleRoute").classList.toggle("on", showRoute);
+  refreshRoute();
+}
+
+// ===== ピンリセット =====
+function resetPins() {
+  if (!confirm("全ピンをリセットしますか？")) return;
+  pins = {};
+  savePins();
+  exitPinMode();
+  refreshMarkers();
+}
+
+// ===== タブ =====
+function switchPTab(name) {
+  document.querySelectorAll(".ptab").forEach((t, i) =>
+    t.classList.toggle("active", ["stops","settings"][i] === name)
+  );
+  document.querySelectorAll(".panel-view").forEach(v => v.classList.remove("active"));
+  document.getElementById("pview-" + name).classList.add("active");
+}
+
+// ===== ユーティリティ =====
+function escHtml(s) {
+  return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+
+// ===== 他タブからのデータ変更を検知（同スマホで両ファイル使う場合） =====
+window.addEventListener("storage", e => {
+  if ([STORAGE_CUSTOMERS, STORAGE_CHECKED].includes(e.key)) {
+    loadData();
+    refreshMarkers();
+  }
+});
+
+// ===== 起動 =====
+loadData();
+refreshMarkers();
+startGPS();
+</script>
+</body>
+</html>

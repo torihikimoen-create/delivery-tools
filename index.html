@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>配達ツール</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif;
+  background: #1c1c1e;
+  color: #fff;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  padding: 40px 24px;
+}
+h1 { font-size: 22px; font-weight: 700; margin-bottom: 8px; }
+p  { font-size: 14px; color: #8e8e93; text-align: center; line-height: 1.6; }
+.cards { display: flex; flex-direction: column; gap: 14px; width: 100%; max-width: 360px; }
+a.card {
+  display: block;
+  background: #2c2c2e;
+  border-radius: 14px;
+  padding: 20px;
+  text-decoration: none;
+  color: #fff;
+  border: 1px solid #3a3a3c;
+}
+.card-icon { font-size: 32px; margin-bottom: 8px; }
+.card-title { font-size: 18px; font-weight: 700; }
+.card-desc  { font-size: 13px; color: #8e8e93; margin-top: 4px; }
+</style>
+</head>
+<body>
+<h1>📦 配達ツール</h1>
+<p>ホーム画面に追加すると<br>アプリのように使えます</p>
+<div class="cards">
+  <a class="card" href="delivery_check.html">
+    <div class="card-icon">✅</div>
+    <div class="card-title">配達チェック</div>
+    <div class="card-desc">配達先をタップしてチェック。未配達を一覧確認。</div>
+  </a>
+  <a class="card" href="delivery_map.html">
+    <div class="card-icon">📍</div>
+    <div class="card-title">配達マップ</div>
+    <div class="card-desc">GPS追従・地図上でピン管理・チェックと連携。</div>
+  </a>
+</div>
+</body>
+</html>
