@@ -244,6 +244,7 @@ header h1 { font-size: 17px; font-weight: 700; }
         <span>ピン設置モード</span>
         <div class="toggle" id="togglePinMode" onclick="togglePinMode()"></div>
       </div>
+      <button class="btn-danger" onclick="clearTrack()" style="background:#ff9500">今日の軌跡をクリア</button>
       <button class="btn-danger" onclick="resetPins()">全ピンをリセット</button>
     </div>
   </div>
@@ -254,6 +255,7 @@ header h1 { font-size: 17px; font-weight: 700; }
 const STORAGE_CUSTOMERS = "delivery_customers";
 const STORAGE_CHECKED   = "delivery_checked";
 const STORAGE_PINS      = "delivery_pins";       // {index: [lat, lng]}
+const STORAGE_TRACK     = "delivery_track";      // {"2026-05-09": [[lat,lng],...], ...}
 
 // ===== State =====
 let customers = [];
@@ -269,6 +271,12 @@ let followGPS  = true;
 let showRoute  = true;
 let pinMode    = false;
 let pinModeTarget = null;    // ピン設置待ちのインデックス
+
+// 軌跡
+let trackPoints  = [];       // 今日の記録済み座標
+let trackLine    = null;     // 地図上のオレンジライン
+let trackInterval = null;    // 15秒ごとの保存タイマー
+const TRACK_INTERVAL_MS = 15000;
 
 // ===== 地図初期化 =====
 const map = L.map("map", {
@@ -357,6 +365,67 @@ function refreshRoute() {
   }
 }
 
+// ===== 軌跡 =====
+function loadTrack() {
+  const raw = localStorage.getItem(STORAGE_TRACK);
+  const all  = raw ? JSON.parse(raw) : {};
+  trackPoints = all[todayKey()] || [];
+  drawTrackLine();
+}
+
+function recordTrackPoint() {
+  if (!currentPos) return;
+  const [lat, lng] = currentPos;
+  const last = trackPoints[trackPoints.length - 1];
+  // 5m以上動いた場合のみ追記（停車中の無駄なポイントを省く）
+  if (last && distance(last[0], last[1], lat, lng) < 5) return;
+
+  trackPoints.push([lat, lng]);
+  drawTrackLine();
+  saveTrack();
+}
+
+function saveTrack() {
+  const raw = localStorage.getItem(STORAGE_TRACK);
+  const all  = raw ? JSON.parse(raw) : {};
+  all[todayKey()] = trackPoints;
+  // 直近7日分だけ保持（古いデータを自動削除）
+  const keys = Object.keys(all).sort().reverse();
+  keys.slice(7).forEach(k => delete all[k]);
+  localStorage.setItem(STORAGE_TRACK, JSON.stringify(all));
+}
+
+function drawTrackLine() {
+  if (trackLine) { map.removeLayer(trackLine); trackLine = null; }
+  if (trackPoints.length < 2) return;
+  trackLine = L.polyline(trackPoints, {
+    color: "#ff9500",
+    weight: 4,
+    opacity: 0.85,
+  }).addTo(map);
+}
+
+function clearTrack() {
+  if (!confirm("今日の軌跡を消しますか？")) return;
+  trackPoints = [];
+  if (trackLine) { map.removeLayer(trackLine); trackLine = null; }
+  saveTrack();
+}
+
+function todayKey() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+// 2点間距離（メートル概算）
+function distance(lat1, lng1, lat2, lng2) {
+  const R = 6371000;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2 +
+            Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dLng/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
 // ===== GPS =====
 function startGPS() {
   if (!navigator.geolocation) {
@@ -387,6 +456,8 @@ function startGPS() {
         }).addTo(map);
 
         map.setView([lat, lng], 16);
+        // 軌跡タイマー開始
+        trackInterval = setInterval(recordTrackPoint, TRACK_INTERVAL_MS);
       } else {
         gpsMarker.setLatLng([lat, lng]);
         gpsCircle.setLatLng([lat, lng]).setRadius(accuracy);
@@ -559,6 +630,7 @@ window.addEventListener("storage", e => {
 // ===== 起動 =====
 loadData();
 refreshMarkers();
+loadTrack();
 startGPS();
 </script>
 </body>
