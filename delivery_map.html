@@ -560,6 +560,7 @@ function renderStopList() {
       <div class="stop-actions">
         ${hasPin
           ? `<button class="btn-sm btn-goto" onclick="gotoStop(${i})">地図</button>
+             <button class="btn-sm btn-unpin" onclick="enterPinModeForIndex(${i})">移動</button>
              <button class="btn-sm ${isDone ? "btn-unpin" : "btn-check"}" onclick="toggleCheck(${i})">${isDone ? "戻す" : "完了"}</button>`
           : `<button class="btn-sm btn-goto" onclick="enterPinModeForIndex(${i});switchPTab('stops')">設置</button>`
         }
