@@ -369,7 +369,10 @@ function refreshRoute() {
 function loadTrack() {
   const raw = localStorage.getItem(STORAGE_TRACK);
   const all  = raw ? JSON.parse(raw) : {};
-  trackPoints = all[todayKey()] || [];
+  // 当日＋前日を結合（午前9時前の記録がUTCズレで前日キーに入る問題の救済）
+  const prev = all[yesterdayKey()] || [];
+  const today = all[todayKey()] || [];
+  trackPoints = [...prev, ...today];
   drawTrackLine();
 }
 
@@ -413,7 +416,14 @@ function clearTrack() {
 }
 
 function todayKey() {
-  return new Date().toISOString().slice(0, 10);
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+function yesterdayKey() {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
 
 // 2点間距離（メートル概算）
