@@ -244,7 +244,8 @@ header h1 { font-size: 17px; font-weight: 700; }
         <span>ピン設置モード</span>
         <div class="toggle" id="togglePinMode" onclick="togglePinMode()"></div>
       </div>
-      <button class="btn-danger" onclick="clearTrack()" style="background:#ff9500">今日の軌跡をクリア</button>
+      <button class="btn-danger" onclick="resetAllChecked()" style="background:#ff9500">全件を未配達に戻す</button>
+      <button class="btn-danger" onclick="clearTrack()" style="background:#636366">今日の軌跡をクリア</button>
       <button class="btn-danger" onclick="resetPins()">全ピンをリセット</button>
     </div>
   </div>
@@ -605,6 +606,14 @@ function toggleRoute() {
   showRoute = !showRoute;
   document.getElementById("toggleRoute").classList.toggle("on", showRoute);
   refreshRoute();
+}
+
+// ===== 全件未配達に戻す =====
+function resetAllChecked() {
+  if (!confirm("全件を未配達に戻しますか？")) return;
+  checked = {};
+  saveChecked();
+  refreshMarkers();
 }
 
 // ===== ピンリセット =====
