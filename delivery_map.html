@@ -246,7 +246,6 @@ header h1 { font-size: 17px; font-weight: 700; }
       </div>
       <button class="btn-danger" onclick="resetAllChecked()" style="background:#ff9500">全件を未配達に戻す</button>
       <button class="btn-danger" onclick="clearTrack()" style="background:#636366">今日の軌跡をクリア</button>
-      <button class="btn-danger" onclick="resetPins()">全ピンをリセット</button>
     </div>
   </div>
 </div>
@@ -255,14 +254,14 @@ header h1 { font-size: 17px; font-weight: 700; }
 // ===== localStorage キー（delivery_check.html と共有） =====
 const STORAGE_CUSTOMERS = "delivery_customers";
 const STORAGE_CHECKED   = "delivery_checked";
-const STORAGE_PINS      = "delivery_pins";       // {index: [lat, lng]}
+const STORAGE_PINS      = "delivery_pins";       // {id: [lat, lng]}
 const STORAGE_TRACK     = "delivery_track";      // {"2026-05-09": [[lat,lng],...], ...}
 
 // ===== State =====
 let customers = [];
 let checked   = {};
-let pins      = {};          // {index: [lat, lng]}
-let markers   = {};          // {index: L.marker}
+let pins      = {};          // {id: [lat, lng]}
+let markers   = {};          // {id: L.marker}
 let routeLine = null;
 let gpsMarker = null;
 let gpsCircle = null;
@@ -271,7 +270,7 @@ let currentPos = null;
 let followGPS  = true;
 let showRoute  = true;
 let pinMode    = false;
-let pinModeTarget = null;    // ピン設置待ちのインデックス
+let pinModeTarget = null;    // ピン設置待ちのcustomer id
 
 // 軌跡
 let trackPoints  = [];       // 今日の記録済み座標
@@ -302,6 +301,40 @@ function loadData() {
 
   const rawP = localStorage.getItem(STORAGE_PINS);
   pins = rawP ? JSON.parse(rawP) : {};
+
+  migrateLegacyIndexKeys();
+}
+
+// 旧バージョン（顧客にidが無く、配列インデックスでpins/checkedを管理していた形式）からの移行。
+// idが無い顧客にidを付与し、対応する数値インデックスキーのpins/checkedをid参照に付け替える。
+function migrateLegacyIndexKeys() {
+  let changed = false;
+
+  customers = customers.map((c, i) => {
+    if (c.id) return c;
+    changed = true;
+    return { ...c, id: "m" + i };
+  });
+
+  customers.forEach((c, i) => {
+    const legacyKey = String(i);
+    if (pins[legacyKey] !== undefined && pins[c.id] === undefined) {
+      pins[c.id] = pins[legacyKey];
+      delete pins[legacyKey];
+      changed = true;
+    }
+    if (checked[legacyKey] !== undefined && checked[c.id] === undefined) {
+      checked[c.id] = checked[legacyKey];
+      delete checked[legacyKey];
+      changed = true;
+    }
+  });
+
+  if (changed) {
+    localStorage.setItem(STORAGE_CUSTOMERS, JSON.stringify(customers));
+    savePins();
+    saveChecked();
+  }
 }
 
 function saveChecked() {
@@ -333,14 +366,14 @@ function refreshMarkers() {
   Object.values(markers).forEach(m => map.removeLayer(m));
   markers = {};
 
-  customers.forEach((c, i) => {
-    if (!pins[i]) return;
-    const isDone = !!checked[i];
-    const marker = L.marker(pins[i], { icon: makeIcon(isDone, true) })
+  customers.forEach(c => {
+    if (!pins[c.id]) return;
+    const isDone = !!checked[c.id];
+    const marker = L.marker(pins[c.id], { icon: makeIcon(isDone, true) })
       .addTo(map)
-      .bindPopup(`<b>${c.name}</b>${c.note ? `<br>${c.note}` : ""}<br><button onclick="toggleCheck(${i})" style="margin-top:6px;padding:4px 10px;background:${isDone?"#ff3b30":"#34c759"};color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer">${isDone ? "未配達に戻す" : "✅ 配達完了"}</button>`);
+      .bindPopup(`<b>${c.name}</b>${c.note ? `<br>${c.note}` : ""}<br><button onclick="toggleCheck('${c.id}')" style="margin-top:6px;padding:4px 10px;background:${isDone?"#ff3b30":"#34c759"};color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer">${isDone ? "未配達に戻す" : "✅ 配達完了"}</button>`);
 
-    markers[i] = marker;
+    markers[c.id] = marker;
   });
 
   refreshRoute();
@@ -353,7 +386,7 @@ function refreshRoute() {
   if (!showRoute) return;
 
   const coords = customers
-    .map((_, i) => pins[i])
+    .map(c => pins[c.id])
     .filter(Boolean);
 
   if (coords.length >= 2) {
@@ -495,23 +528,25 @@ map.on("click", e => {
   refreshMarkers();
 
   // 次の未ピンへ
-  const next = customers.findIndex((_, i) => i > pinModeTarget && !pins[i]);
-  if (next !== -1) {
-    pinModeTarget = next;
+  const targetIdx = customers.findIndex(c => c.id === pinModeTarget);
+  const next = customers.find((c, i) => i > targetIdx && !pins[c.id]);
+  if (next) {
+    pinModeTarget = next.id;
     document.getElementById("pinBanner").textContent =
-      `📌 ${customers[next].name} の場所をタップ`;
+      `📌 ${next.name} の場所をタップ`;
   } else {
     exitPinMode();
   }
 });
 
-function enterPinModeForIndex(i) {
+function enterPinModeForId(id) {
   pinMode = true;
-  pinModeTarget = i;
+  pinModeTarget = id;
+  const c = customers.find(cust => cust.id === id);
   document.getElementById("togglePinMode").classList.add("on");
   document.getElementById("pinBanner").classList.add("show");
   document.getElementById("pinBanner").textContent =
-    `📌 ${customers[i].name} の場所をタップ`;
+    `📌 ${c.name} の場所をタップ`;
 }
 
 function exitPinMode() {
@@ -526,18 +561,18 @@ function togglePinMode() {
     exitPinMode();
   } else {
     // 最初の未ピンから開始
-    const first = customers.findIndex((_, i) => !pins[i]);
-    if (first === -1) {
-      alert("全配達先にピンが設置済みです。\nリセットしてやり直すか、個別に「再設置」を使ってください。");
+    const first = customers.find(c => !pins[c.id]);
+    if (!first) {
+      alert("全配達先にピンが設置済みです。\n位置を直したい場合はストップリストの「移動」を使ってください。");
       return;
     }
-    enterPinModeForIndex(first);
+    enterPinModeForId(first.id);
   }
 }
 
 // ===== チェック =====
-function toggleCheck(i) {
-  checked[i] = !checked[i];
+function toggleCheck(id) {
+  checked[id] = !checked[id];
   saveChecked();
   map.closePopup();
   refreshMarkers();
@@ -553,9 +588,9 @@ function renderStopList() {
     return;
   }
 
-  customers.forEach((c, i) => {
-    const isDone = !!checked[i];
-    const hasPin = !!pins[i];
+  customers.forEach(c => {
+    const isDone = !!checked[c.id];
+    const hasPin = !!pins[c.id];
 
     const row = document.createElement("div");
     row.className = "stop-row" + (isDone ? " done" : "");
@@ -570,10 +605,10 @@ function renderStopList() {
       </div>
       <div class="stop-actions">
         ${hasPin
-          ? `<button class="btn-sm btn-goto" onclick="gotoStop(${i})">地図</button>
-             <button class="btn-sm btn-unpin" onclick="enterPinModeForIndex(${i})">移動</button>
-             <button class="btn-sm ${isDone ? "btn-unpin" : "btn-check"}" onclick="toggleCheck(${i})">${isDone ? "戻す" : "完了"}</button>`
-          : `<button class="btn-sm btn-goto" onclick="enterPinModeForIndex(${i});switchPTab('stops')">設置</button>`
+          ? `<button class="btn-sm btn-goto" onclick="gotoStop('${c.id}')">地図</button>
+             <button class="btn-sm btn-unpin" onclick="enterPinModeForId('${c.id}')">移動</button>
+             <button class="btn-sm ${isDone ? "btn-unpin" : "btn-check"}" onclick="toggleCheck('${c.id}')">${isDone ? "戻す" : "完了"}</button>`
+          : `<button class="btn-sm btn-goto" onclick="enterPinModeForId('${c.id}');switchPTab('stops')">設置</button>`
         }
       </div>
     `;
@@ -581,10 +616,10 @@ function renderStopList() {
   });
 }
 
-function gotoStop(i) {
-  if (!pins[i]) return;
-  map.setView(pins[i], 17);
-  if (markers[i]) markers[i].openPopup();
+function gotoStop(id) {
+  if (!pins[id]) return;
+  map.setView(pins[id], 17);
+  if (markers[id]) markers[id].openPopup();
   followGPS = false;
   document.getElementById("toggleFollow").classList.remove("on");
 }
@@ -592,7 +627,7 @@ function gotoStop(i) {
 // ===== 進捗 =====
 function updateProgress() {
   const total = customers.length;
-  const done  = Object.values(checked).filter(Boolean).length;
+  const done  = customers.filter(c => checked[c.id]).length;
   document.getElementById("progressPill").textContent = `${done}/${total}`;
 }
 
@@ -613,15 +648,6 @@ function resetAllChecked() {
   if (!confirm("全件を未配達に戻しますか？")) return;
   checked = {};
   saveChecked();
-  refreshMarkers();
-}
-
-// ===== ピンリセット =====
-function resetPins() {
-  if (!confirm("全ピンをリセットしますか？")) return;
-  pins = {};
-  savePins();
-  exitPinMode();
   refreshMarkers();
 }
 

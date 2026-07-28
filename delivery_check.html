@@ -315,9 +315,9 @@
 <script>
 // ---- デフォルト顧客（初回のみ） ----
 const DEFAULT_CUSTOMERS = [
-  { name: "田中様", note: "2F投函" },
-  { name: "鈴木様", note: "" },
-  { name: "山田様", note: "不在時ポスト" },
+  { id: "c1", name: "田中様", note: "2F投函" },
+  { id: "c2", name: "鈴木様", note: "" },
+  { id: "c3", name: "山田様", note: "不在時ポスト" },
 ];
 
 // ---- State ----
@@ -348,6 +348,38 @@ function load() {
     const rawChecked = localStorage.getItem(STORAGE_CHECKED);
     checked = rawChecked ? JSON.parse(rawChecked) : {};
   }
+
+  migrateLegacyIndexKeys();
+}
+
+// 旧バージョン（顧客にidが無く、配列インデックスでcheckedを管理していた形式）からの移行。
+// delivery_map.html側と同じ規則（"m"+元のインデックス）でidを付与し、checkedのキーも付け替える。
+function migrateLegacyIndexKeys() {
+  let changed = false;
+
+  customers = customers.map((c, i) => {
+    if (c.id) return c;
+    changed = true;
+    return { ...c, id: "m" + i };
+  });
+
+  customers.forEach((c, i) => {
+    const legacyKey = String(i);
+    if (checked[legacyKey] !== undefined && checked[c.id] === undefined) {
+      checked[c.id] = checked[legacyKey];
+      delete checked[legacyKey];
+      changed = true;
+    }
+  });
+
+  if (changed) {
+    saveCustomerData();
+    saveChecked();
+  }
+}
+
+function makeId() {
+  return "c" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 }
 
 function saveChecked() {
@@ -364,7 +396,7 @@ function render() {
   list.innerHTML = "";
 
   const total = customers.length;
-  const doneCount = Object.values(checked).filter(Boolean).length;
+  const doneCount = customers.filter(c => checked[c.id]).length;
 
   // プログレス
   const pct = total === 0 ? 0 : Math.round((doneCount / total) * 100);
@@ -377,7 +409,7 @@ function render() {
   banner.classList.toggle("show", total > 0 && doneCount === total);
 
   customers.forEach((c, i) => {
-    const isDone = !!checked[i];
+    const isDone = !!checked[c.id];
     if (filter === "pending" && isDone) return;
     if (filter === "done" && !isDone) return;
 
@@ -395,7 +427,7 @@ function render() {
       </div>
       <div class="order-badge">${i + 1}</div>
     `;
-    card.addEventListener("click", () => toggle(i));
+    card.addEventListener("click", () => toggle(c.id));
     list.appendChild(card);
   });
 
@@ -404,19 +436,16 @@ function render() {
 
 function renderMissed() {
   const el = document.getElementById("missedList");
-  const missed = customers.filter((_, i) => !checked[i]);
+  const missed = customers.filter(c => !checked[c.id]);
   if (missed.length === 0) {
     el.innerHTML = `<div class="missed-empty">✅ 未配達なし</div>`;
     return;
   }
-  el.innerHTML = missed.map((c, idx) => {
-    const origIdx = customers.indexOf(c);
-    return `
+  el.innerHTML = missed.map(c => `
       <div class="missed-card">
         <div class="customer-name">${escHtml(c.name)}</div>
         ${c.note ? `<div class="customer-note">${escHtml(c.note)}</div>` : ""}
-      </div>`;
-  }).join("");
+      </div>`).join("");
 }
 
 function escHtml(s) {
@@ -424,8 +453,8 @@ function escHtml(s) {
 }
 
 // ---- アクション ----
-function toggle(i) {
-  checked[i] = !checked[i];
+function toggle(id) {
+  checked[id] = !checked[id];
   saveChecked();
   render();
 }
@@ -438,7 +467,7 @@ function resetAll() {
 }
 
 function checkAll() {
-  customers.forEach((_, i) => { checked[i] = true; });
+  customers.forEach(c => { checked[c.id] = true; });
   saveChecked();
   render();
 }
@@ -474,15 +503,23 @@ function saveCustomers() {
     .map(l => l.trim())
     .filter(l => l.length > 0);
 
-  customers = lines.map(l => {
-    const [name, ...rest] = l.split(",");
-    return { name: name.trim(), note: rest.join(",").trim() };
+  // 既存顧客と同じ「名前,備考」の行はidを引き継ぐ（ピン・チェック状態を保持するため）
+  const pool = {};
+  customers.forEach(c => {
+    const key = c.name + "|" + c.note;
+    (pool[key] = pool[key] || []).push(c.id);
   });
 
-  // チェック状態はリセット（件数・順番が変わる可能性があるため）
-  checked = {};
+  customers = lines.map(l => {
+    const [name, ...rest] = l.split(",");
+    const trimmedName = name.trim();
+    const note = rest.join(",").trim();
+    const key = trimmedName + "|" + note;
+    const reuseId = (pool[key] && pool[key].shift()) || makeId();
+    return { id: reuseId, name: trimmedName, note };
+  });
+
   saveCustomerData();
-  saveChecked();
 
   const msg = document.getElementById("saveMsg");
   msg.textContent = `✓ ${customers.length} 件保存しました`;
